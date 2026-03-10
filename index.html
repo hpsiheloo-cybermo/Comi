@@ -449,15 +449,17 @@
   /* Toast */
   #toast {
     position: fixed; bottom: 30px; right: 30px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px 18px;
+    background: #1a1f2a; border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 20px;
     font-size: 13px; font-family: var(--mono);
     transform: translateY(80px); opacity: 0;
-    transition: all 0.3s; z-index: 100;
+    transition: all 0.3s; z-index: 9999;
+    max-width: 320px; line-height: 1.5;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
   #toast.show { transform: translateY(0); opacity: 1; }
-  #toast.ok { border-color: rgba(0,230,118,0.4); color: var(--green); }
-  #toast.err { border-color: rgba(255,79,106,0.4); color: var(--red); }
+  #toast.ok { border-color: rgba(0,230,118,0.5); color: var(--green); background: rgba(0,230,118,0.08); }
+  #toast.err { border-color: rgba(255,79,106,0.5); color: var(--red); background: rgba(255,79,106,0.08); }
 
   .pane { display: none; }
   .pane.active { display: block; }
@@ -682,7 +684,7 @@
 
 // ─── State ────────────────────────────────────────────────────────────────────
 /** @type {ReportRecord[]} */
-const history = [];
+const reportHistory = [];
 let activeTab = 'report';
 
 // ─── Tab switching ─────────────────────────────────────────────────────────
@@ -777,7 +779,8 @@ async function apiSubmitReport(payload) {
 
 // ─── Submit Report ─────────────────────────────────────────────────────────
 async function submitReport() {
-  const link = document.getElementById('tg-link').value.trim();
+  const linkEl = document.getElementById('tg-link');
+  const link = linkEl.value.trim();
   const reporter = document.getElementById('reporter-username').value.trim();
   const priority = document.getElementById('priority').value;
   const description = document.getElementById('description').value.trim();
@@ -785,10 +788,22 @@ async function submitReport() {
   const categories = [...document.querySelectorAll('#report-types .report-opt.selected .opt-label')]
     .map(el => el.textContent.trim());
 
+  // Clear previous errors
+  linkEl.style.borderColor = '';
+
   // Validate
   const err = validateLink(link);
-  if (err) { showToast(err, 'err'); return; }
-  if (categories.length === 0) { showToast('Select at least one report category', 'err'); return; }
+  if (err) {
+    linkEl.style.borderColor = 'var(--red)';
+    linkEl.focus();
+    showToast('⚠️ ' + err, 'err');
+    return;
+  }
+  if (categories.length === 0) {
+    showToast('⚠️ Please select at least one report category', 'err');
+    document.getElementById('report-types').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
 
   const parsed = parseTelegramLink(link);
   const id = genId();
@@ -805,7 +820,7 @@ async function submitReport() {
     const res = await apiSubmitReport(payload);
 
     // Save to history
-    history.unshift({ ...payload, status: 'submitted' });
+    reportHistory.unshift({ ...payload, status: 'submitted' });
 
     showResultPanel('success', '✓ Report Submitted Successfully', `Report ID: ${res.id} · ETA: ${res.eta}`);
     showResultDetails({
@@ -828,7 +843,7 @@ async function submitReport() {
       el.querySelector('.opt-check').textContent = '';
     });
   } catch (e) {
-    history.unshift({ ...payload, status: 'error' });
+    reportHistory.unshift({ ...payload, status: 'error' });
     showResultPanel('error', '✗ Submission Failed', e.message);
     showToast(e.message, 'err');
   } finally {
@@ -841,15 +856,17 @@ async function submitReport() {
 function showResultPanel(type, title, msg) {
   const panel = document.getElementById('result-panel');
   const icon = document.getElementById('result-icon');
-  panel.className = '';
-  panel.classList.add(type === 'success' ? 'success' : type === 'error' ? 'error' : '');
+  // Reset classes but keep display
+  panel.className = 'show';
+  if (type === 'success') panel.classList.add('success');
+  if (type === 'error') panel.classList.add('error');
   panel.style.display = 'block';
   document.getElementById('result-title').textContent = title;
   document.getElementById('result-msg').textContent = msg;
   icon.className = 'result-icon ' + (type === 'success' ? 'ok' : type === 'error' ? 'err' : 'loading');
   icon.textContent = type === 'success' ? '✓' : type === 'error' ? '✗' : '↻';
   document.getElementById('result-details').innerHTML = '';
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
 }
 
 function showResultDetails(data) {
@@ -920,11 +937,11 @@ function prefillReport(url) {
 // ─── History ──────────────────────────────────────────────────────────────
 function renderHistory() {
   const list = document.getElementById('history-list');
-  if (history.length === 0) {
+  if (reportHistory.length === 0) {
     list.innerHTML = '<div class="empty-state">// no reports submitted yet</div>';
     return;
   }
-  list.innerHTML = history.map(r => `
+  list.innerHTML = reportHistory.map(r => `
     <div class="hist-item" onclick="prefillReport('${r.link}')">
       <div class="hist-dot ${r.status === 'submitted' ? 'ok' : 'pending'}"></div>
       <div>
